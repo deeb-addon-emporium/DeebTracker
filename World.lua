@@ -2,7 +2,6 @@
 local DT = DeebTracker
 
 local lastMoney = nil
-local lastDamageSource = nil
 local lastLootOpen = 0
 local lastDeath = 0
 local crumbM, crumbX, crumbY = nil, nil, nil
@@ -47,7 +46,7 @@ local function moneyReason()
 end
 
 local f = CreateFrame("Frame")
-for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "PLAYER_DEAD", "PLAYER_MONEY", "COMBAT_LOG_EVENT_UNFILTERED", "LOOT_OPENED" }) do pcall(f.RegisterEvent, f, e) end
+for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "PLAYER_DEAD", "PLAYER_MONEY", "LOOT_OPENED" }) do pcall(f.RegisterEvent, f, e) end
 f:SetScript("OnEvent", function(_, event)
 	if event == "PLAYER_ENTERING_WORLD" then
 		C_Timer.After(1, function() checkZone(true); checkInstance(); local m = DT.plain(GetMoney()); lastMoney = m end)
@@ -60,7 +59,10 @@ f:SetScript("OnEvent", function(_, event)
 	elseif event == "PLAYER_DEAD" then
 		if GetTime() - lastDeath > 5 then
 			lastDeath = GetTime()
-			DT.log("dead", { killer = lastDamageSource })
+			-- the combat log is forbidden to addons on this client; best available: your target
+			local killer
+			if UnitExists("target") and UnitCanAttack("player", "target") then killer = DT.plain(UnitName("target")) end
+			DT.log("dead", { killer = killer })
 		end
 	elseif event == "PLAYER_MONEY" then
 		local m = DT.plain(GetMoney())
@@ -69,12 +71,6 @@ f:SetScript("OnEvent", function(_, event)
 			if delta ~= 0 then DT.log("gold", { delta = delta, reason = moneyReason() }) end
 		end
 		lastMoney = m
-	elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-		local ok, _, sub, _, _, srcName, _, _, destGUID = pcall(CombatLogGetCurrentEventInfo)
-		if ok and sub and destGUID == UnitGUID("player") and (string.find(sub, "_DAMAGE", 1, true)) and srcName then
-			local n = DT.plain(srcName)
-			if n then lastDamageSource = n end
-		end
 	end
 end)
 

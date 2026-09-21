@@ -9,7 +9,7 @@
 -- Numbers go through plain(): a secret value is stored as nil and the event gets secret=true.
 DeebTracker = DeebTracker or {}
 local DT = DeebTracker
-DT.VERSION = "1.1"
+DT.VERSION = "1.2"
 DT.SCHEMA = 1
 DT.MAX_EVENTS = 40000
 
