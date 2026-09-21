@@ -9,7 +9,7 @@
 -- Numbers go through plain(): a secret value is stored as nil and the event gets secret=true.
 DeebTracker = DeebTracker or {}
 local DT = DeebTracker
-DT.VERSION = "1.0"
+DT.VERSION = "1.1"
 DT.SCHEMA = 1
 DT.MAX_EVENTS = 40000
 
@@ -43,6 +43,18 @@ function DT.played()
 	return math.floor(DT.playedBase + (GetTime() - DT.playedAt))
 end
 
+-- where you are: ui map id and x/y as 0-100 with one decimal (blank inside instances)
+function DT.pos()
+	if not C_Map or not C_Map.GetBestMapForUnit then return nil end
+	local ok, m = pcall(C_Map.GetBestMapForUnit, "player")
+	if not ok or not m then return nil end
+	local ok2, v = pcall(C_Map.GetPlayerMapPosition, m, "player")
+	if not ok2 or not v then return m end
+	local x, y = DT.plain(v.x), DT.plain(v.y)
+	if not x or not y then return m end
+	return m, math.floor(x * 1000 + 0.5) / 10, math.floor(y * 1000 + 0.5) / 10
+end
+
 function DT.char()
 	if DT.charKey then return DT.charKey end
 	local name, realm = UnitName("player"), GetRealmName()
@@ -58,6 +70,7 @@ function DT.log(kind, fields)
 		s = DT.loginAt and (math.floor((GetTime() - DT.loginAt) * 10) / 10) or nil,
 		p = DT.played(), c = DT.char(), L = UnitLevel("player"),
 		z = DT.lastZone, sz = DT.lastSub, inst = DT.instID }
+	local m, px, py = DT.pos(); ev.m = m; ev.px = px; ev.py = py
 	local xp, sec = DT.plain(UnitXP("player")); ev.x = xp; if sec then ev.secret = true end
 	if fields then
 		for k, v in pairs(fields) do
@@ -108,7 +121,10 @@ f:SetScript("OnEvent", function(_, event, a1, a2)
 	elseif event == "TIME_PLAYED_MSG" then
 		local total, lvl = DT.plain(a1), DT.plain(a2)
 		if total then DT.playedBase = total; DT.playedAt = GetTime() end
-		DT.log("played", { total = total, atLevel = lvl })
+		if not DT.lastPlayedLog or GetTime() - DT.lastPlayedLog > 5 then
+			DT.lastPlayedLog = GetTime()
+			DT.log("played", { total = total, atLevel = lvl })
+		end
 	elseif event == "PLAYER_LEVEL_UP" then
 		touchChar()
 	end

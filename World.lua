@@ -3,6 +3,9 @@ local DT = DeebTracker
 
 local lastMoney = nil
 local lastDamageSource = nil
+local lastLootOpen = 0
+local lastDeath = 0
+local crumbM, crumbX, crumbY = nil, nil, nil
 
 local function zone()
 	local z = GetRealZoneText and GetRealZoneText() or nil
@@ -35,7 +38,7 @@ end
 
 local function moneyReason()
 	if MerchantFrame and MerchantFrame:IsShown() then return "vendor" end
-	if LootFrame and LootFrame:IsShown() then return "loot" end
+	if (LootFrame and LootFrame:IsShown()) or GetTime() - lastLootOpen < 2 then return "loot" end
 	if DT.lastTurnIn and GetTime() - DT.lastTurnIn < 1.5 then return "quest" end
 	if MailFrame and MailFrame:IsShown() then return "mail" end
 	if AuctionHouseFrame and AuctionHouseFrame:IsShown() then return "auction" end
@@ -44,7 +47,7 @@ local function moneyReason()
 end
 
 local f = CreateFrame("Frame")
-for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "PLAYER_DEAD", "PLAYER_MONEY", "COMBAT_LOG_EVENT_UNFILTERED" }) do pcall(f.RegisterEvent, f, e) end
+for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "PLAYER_DEAD", "PLAYER_MONEY", "COMBAT_LOG_EVENT_UNFILTERED", "LOOT_OPENED" }) do pcall(f.RegisterEvent, f, e) end
 f:SetScript("OnEvent", function(_, event)
 	if event == "PLAYER_ENTERING_WORLD" then
 		C_Timer.After(1, function() checkZone(true); checkInstance(); local m = DT.plain(GetMoney()); lastMoney = m end)
@@ -52,8 +55,13 @@ f:SetScript("OnEvent", function(_, event)
 		checkZone(false); checkInstance()
 	elseif event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" then
 		local z, sz = zone(); DT.lastZone, DT.lastSub = z, sz
+	elseif event == "LOOT_OPENED" then
+		lastLootOpen = GetTime()
 	elseif event == "PLAYER_DEAD" then
-		DT.log("dead", { killer = lastDamageSource })
+		if GetTime() - lastDeath > 5 then
+			lastDeath = GetTime()
+			DT.log("dead", { killer = lastDamageSource })
+		end
 	elseif event == "PLAYER_MONEY" then
 		local m = DT.plain(GetMoney())
 		if m and lastMoney then
@@ -68,4 +76,14 @@ f:SetScript("OnEvent", function(_, event)
 			if n then lastDamageSource = n end
 		end
 	end
+end)
+
+-- breadcrumbs: a "pos" event every 15 s while you have moved at least 1% of the map
+C_Timer.NewTicker(15, function()
+	if DT.paused then return end
+	local m, x, y = DT.pos()
+	if not m or not x then return end
+	if crumbM == m and crumbX and math.abs(x - crumbX) < 1 and math.abs(y - crumbY) < 1 then return end
+	crumbM, crumbX, crumbY = m, x, y
+	DT.log("pos", {})
 end)
