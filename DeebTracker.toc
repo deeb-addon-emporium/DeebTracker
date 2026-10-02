@@ -1,10 +1,11 @@
 ## Interface: 16001
 ## Title: DeebTracker
 ## Notes: Logs everything that happens to your characters (quests, XP, kills, levels, zones, deaths, gold) with timestamps, for WoW Forever route data. /dt for status.
-## Version: 1.2
+## Version: 1.6
 ## SavedVariables: DeebTrackerDB
 Core.lua
 Quests.lua
 XP.lua
 World.lua
 Status.lua
+Splits.lua

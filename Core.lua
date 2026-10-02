@@ -9,7 +9,7 @@
 -- Numbers go through plain(): a secret value is stored as nil and the event gets secret=true.
 DeebTracker = DeebTracker or {}
 local DT = DeebTracker
-DT.VERSION = "1.2"
+DT.VERSION = "1.6"
 DT.SCHEMA = 1
 DT.MAX_EVENTS = 40000
 
@@ -33,7 +33,7 @@ local function db()
 	if type(DeebTrackerDB) ~= "table" then DeebTrackerDB = {} end
 	local d = DeebTrackerDB
 	d.schema = DT.SCHEMA; d.addonVersion = DT.VERSION
-	d.chars = d.chars or {}; d.events = d.events or {}; d.cursor = d.cursor or 0
+	d.chars = d.chars or {}; d.events = d.events or {}
 	return d
 end
 DT.db = db
@@ -62,6 +62,9 @@ function DT.char()
 	return DT.charKey
 end
 
+-- events that carry XP get wr = Well-Rested stacks (see XP.lua)
+local XP_KINDS = { qt = true, kx = true, ox = true, qx = true }
+
 -- append one event. fields is a table of the event's own data; secret numbers are nil'd.
 function DT.log(kind, fields)
 	if DT.paused then return end
@@ -71,6 +74,7 @@ function DT.log(kind, fields)
 		p = DT.played(), c = DT.char(), L = UnitLevel("player"),
 		z = DT.lastZone, sz = DT.lastSub, inst = DT.instID }
 	local m, px, py = DT.pos(); ev.m = m; ev.px = px; ev.py = py
+	if XP_KINDS[kind] and DT.refreshWR then ev.wr = DT.refreshWR() end
 	local xp, sec = DT.plain(UnitXP("player")); ev.x = xp; if sec then ev.secret = true end
 	if fields then
 		for k, v in pairs(fields) do
@@ -83,14 +87,22 @@ function DT.log(kind, fields)
 	end
 	local n = #d.events + 1
 	d.events[n] = ev
-	-- cap: only drop events the app already uploaded
-	if n > DT.MAX_EVENTS and d.cursor > 0 then
-		local drop = math.min(d.cursor, n - DT.MAX_EVENTS)
-		for _ = 1, drop do table.remove(d.events, 1) end
-		d.cursor = d.cursor - drop
-	elseif n > DT.MAX_EVENTS and not DT.warnedCap then
-		DT.warnedCap = true
-		DT.msg("over " .. DT.MAX_EVENTS .. " events and nothing uploaded yet - still logging, but let the app sync")
+	-- cap: only drop events already uploaded. The Emporium app writes uploadedThrough (the newest
+	-- uploaded event time) into this file while WoW is closed; events at or before it are safe.
+	if n > DT.MAX_EVENTS then
+		local through = d.uploadedThrough
+		local drop = 0
+		if through then
+			while drop < n - DT.MAX_EVENTS and d.events[drop + 1] and (d.events[drop + 1].t or 0) <= through do drop = drop + 1 end
+		end
+		if drop > 0 then
+			local kept = {}
+			for i = drop + 1, n do kept[#kept + 1] = d.events[i] end
+			d.events = kept
+		elseif not DT.warnedCap then
+			DT.warnedCap = true
+			DT.msg("over " .. DT.MAX_EVENTS .. " events and nothing uploaded yet - still logging. Turn on sharing in Deeb's Addon Emporium so old events can be trimmed.")
+		end
 	end
 	return ev
 end
